@@ -438,6 +438,40 @@ abstract class Model extends BaseModel
     }
 
     /**
+     * Set the keys for a save update query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    protected function setKeysForSaveQuery(\Illuminate\Database\Eloquent\Builder $query)
+    {
+        if (is_array($this->getKeyName())) {
+            foreach ($this->getKeyName() as $key) {
+                $query->where($key, '=', $this->original[$key]??null);
+            }
+
+        }
+
+        return $query;
+    }
+
+    public function getKeyName()
+    {
+        return $this->primaryKeys;
+    }
+
+    /**
+     * Get the primary key value for a save query.
+     *
+     * @return mixed
+     */
+    protected function getKeyForSaveQuery()
+    {
+        return $this->original[$this->getKeyName()]
+            ?? $this->getKey();
+    }
+
+    /**
      * Create or Update the model in the database.
      *
      * @param  array $primaryKeys
@@ -447,9 +481,8 @@ abstract class Model extends BaseModel
      */
     public function updateOrCreate(array $primaryKeys = [], $values = [])
     {
-        $instance = $this->where($primaryKeys)->first();
+        $instance = static::firstOrNew($primaryKeys);
         $instance->fill($values)->save();
-
         return $instance;
     }
 
