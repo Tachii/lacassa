@@ -34,6 +34,8 @@ abstract class Model extends BaseModel
      */
     protected $parentRelation;
 
+    public $incrementing = false;
+
     /**
      * Custom accessor for the model's id.
      *
