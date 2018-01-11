@@ -150,13 +150,14 @@ class Connection extends BaseConnection
      */
     public function statement($query, $bindings = [])
     {
-        foreach($bindings as $binding)
-          {
+        foreach ($bindings as $binding) {
             $value = 'string' == strtolower(gettype($binding)) ? "'" . $binding . "'" : $binding;
+            $value = ('null' == strtolower(gettype($binding))) ? "NULL" : $value;
             $query = preg_replace('/\?/', $value, $query, 1);
-          }
-          $builder = new Query\Builder($this, $this->getPostProcessor());
-          return $builder->executeCql($query);
+        }
+        $builder = new Query\Builder($this, $this->getPostProcessor());
+
+        return $builder->executeCql($query);
     }
 
     /**
