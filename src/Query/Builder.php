@@ -1,14 +1,11 @@
 <?php namespace Cubettech\Lacassa\Query;
 
-use Closure;
-use DateTime;
-use InvalidArgumentException;
+use Cassandra;
+use Cubettech\Lacassa\Connection;
 use Illuminate\Database\Query\Builder as BaseBuilder;
-use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
-use Cubettech\Lacassa\Connection;
-use Cassandra;
+use InvalidArgumentException;
 
 
 class Builder extends BaseBuilder
@@ -26,7 +23,7 @@ class Builder extends BaseBuilder
         'order' => [],
         'union' => [],
         'updateCollection' => [],
-        'insertCollection' => []
+        'insertCollection' => [],
     ];
     /**
      * The where constraints for the query.
@@ -36,49 +33,36 @@ class Builder extends BaseBuilder
     public $updateCollections;
 
     public $insertCollections;
-
-    /**
-     * The database collection.
-     *
-     * @var CassandraCollection
-     */
-    protected $collection;
-
     /**
      * The column projections.
      *
      * @var array
      */
     public $projections;
-
     /**
      * The cursor timeout value.
      *
      * @var int
      */
     public $timeout;
-
     /**
      * The cursor hint value.
      *
      * @var int
      */
     public $hint;
-
     /**
      * Custom options to add to the query.
      *
      * @var array
      */
     public $options = [];
-
     /**
      * Indicate if we are executing a pagination query.
      *
      * @var bool
      */
     public $paginating = false;
-
     /**
      * All of the available clause operators.
      *
@@ -128,7 +112,17 @@ class Builder extends BaseBuilder
         'contains',
         'contains key',
     ];
-
+    /**
+     * [$collectionTypes description]
+     * @var [array]
+     */
+    public $collectionTypes = ['set', 'list', 'map'];
+    /**
+     * The database collection.
+     *
+     * @var CassandraCollection
+     */
+    protected $collection;
     /**
      * Operator conversion.
      *
@@ -141,9 +135,8 @@ class Builder extends BaseBuilder
         '<' => '$lt',
         '<=' => '$lte',
         '>' => '$gt',
-        '>=' => '$gte'
+        '>=' => '$gte',
     ];
-
     /**
      * Check if we need to return Collections instead of plain arrays (laravel >= 5.3 )
      *
@@ -152,20 +145,12 @@ class Builder extends BaseBuilder
     protected $useCollections;
 
     /**
-     * [$collectionTypes description]
-     * @var [array]
-     */
-    public $collectionTypes = ['set', 'list', 'map'];
-
-    /**
      * @inheritdoc
      */
     public function __construct(Connection $connection)
     {
         $this->grammar = new Grammar;
         $this->connection = $connection;
-        // $this->processor = $processor;
-        //$this->useCollections = $this->shouldUseCollections();
     }
 
     /**
@@ -181,20 +166,16 @@ class Builder extends BaseBuilder
     }
 
     /**
-     * Execute the query as a "select" statement.
+     * Delete a record from the database.
      *
-     * @param  array $columns
+     * @param  mixed $id
      *
      * @return Cassandra\Rows
      */
-    public function get($columns = ['*'])
+    public function deleteRow()
     {
-        if (is_null($this->columns)) {
-            $this->columns = $columns;
-        }
-
-        $cql = $this->toCql();
-        $cql = $this->bindQuery($cql);
+        $query = $this->grammar->compileDelete($this);
+        $cql = $this->bindQuery($query);
         $result = $this->executeCql($cql);
 
         return $result;
@@ -229,24 +210,7 @@ class Builder extends BaseBuilder
         $statement = new Cassandra\SimpleStatement($cql);
         $future = $this->connection->getCassandraConnection()->executeAsync($statement);
         $result = $future->get();
-
         return collect($result);
-    }
-
-    /**
-     * Delete a record from the database.
-     *
-     * @param  mixed $id
-     *
-     * @return Cassandra\Rows
-     */
-    public function deleteRow()
-    {
-        $query = $this->grammar->compileDelete($this);
-        $cql = $this->bindQuery($query);
-        $result = $this->executeCql($cql);
-
-        return $result;
     }
 
     /**
@@ -267,16 +231,6 @@ class Builder extends BaseBuilder
     }
 
     /**
-     * Get the CQL representation of the query.
-     *
-     * @return string
-     */
-    public function toCql()
-    {
-        return $this->grammar->compileSelect($this);
-    }
-
-    /**
      * Retrieve the "count" result of the query.
      *
      * @param  string $columns
@@ -288,6 +242,36 @@ class Builder extends BaseBuilder
         $result = $this->get();
 
         return (int)$result->count();
+    }
+
+    /**
+     * Execute the query as a "select" statement.
+     *
+     * @param  array $columns
+     *
+     * @return Cassandra\Rows
+     */
+    public function get($columns = ['*'])
+    {
+        if (is_null($this->columns)) {
+            $this->columns = $columns;
+        }
+
+        $cql = $this->toCql();
+        $cql = $this->bindQuery($cql);
+        $result = $this->executeCql($cql);
+
+        return $result;
+    }
+
+    /**
+     * Get the CQL representation of the query.
+     *
+     * @return string
+     */
+    public function toCql()
+    {
+        return $this->grammar->compileSelect($this);
     }
 
     /**
@@ -324,7 +308,7 @@ class Builder extends BaseBuilder
     /**
      * Add a binding to the query.
      *
-     * @param  mixed  $value
+     * @param  mixed $value
      * @param  string $type
      *
      * @return $this
