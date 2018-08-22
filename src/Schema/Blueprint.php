@@ -33,31 +33,32 @@ class Blueprint extends \Illuminate\Database\Schema\Blueprint
     {
         return array_filter(
             $this->columns, function ($column) {
-                return ! $column->change;
-            }
+            return !$column->change;
+        }
         );
     }
+
     /**
      * Get the raw SQL statements for the blueprint.
      *
-     * @param  \Illuminate\Database\Connection              $connection
+     * @param  \Illuminate\Database\Connection $connection
      * @param  \Illuminate\Database\Schema\Grammars\Grammar $grammar
      * @return array
      */
     public function toSql(Connection $connection, BaseGrammar $grammar)
     {
-        $this->addImpliedCommands();
+        $this->addImpliedCommands($grammar);
 
         $statements = [];
         // Each type of command has a corresponding compiler function on the schema
         // grammar which is used to build the necessary SQL statements to build
         // the blueprint element, so we'll just call that compilers function.
         foreach ($this->commands as $command) {
-            $method = 'compile'.ucfirst($command->name);
+            $method = 'compile' . ucfirst($command->name);
 
             if (method_exists($grammar, $method)) {
-                if (! is_null($sql = $grammar->$method($this, $command, $connection))) {
-                    $statements = array_merge($statements, (array) $sql);
+                if (!is_null($sql = $grammar->$method($this, $command, $connection))) {
+                    $statements = array_merge($statements, (array)$sql);
                 }
             }
         }
@@ -68,27 +69,29 @@ class Blueprint extends \Illuminate\Database\Schema\Blueprint
      * Specify the primary key(s) for the table.
      *
      * @param  string|array $columns
-     * @param  string       $name
-     * @param  string|null  $algorithm
+     * @param  string $name
+     * @param  string|null $algorithm
      * @return \Illuminate\Support\Fluent
      */
     public function primary($columns, $name = null, $algorithm = null)
     {
-        $columns = (array) $columns;
+        $columns = (array)$columns;
         //$index = $index ?: $this->createIndexName($type, $columns);
         $this->primary = $command = $this->createCommand('primary', compact('columns', 'algorithm'));
         return $command;
     }
+
     public function compilePrimary()
     {
         $primaryKey = $this->primary;
-        if($primaryKey) {
-            if('primary' == $primaryKey->name) {
+        if ($primaryKey) {
+            if ('primary' == $primaryKey->name) {
                 return sprintf('primary key (%s) ', implode(', ', $primaryKey->columns));
             }
         }
         return;
     }
+
     /**
      * Create a new ascii column on the table.
      *
