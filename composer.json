@@ -1,5 +1,5 @@
 {
-    "name": "cnyesrd/lacassa",
+    "name": "tachii/lacassa",
     "type": "library",
     "description": "Cassandra based query builder for laravel.",
     "license": "MIT",
