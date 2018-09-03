@@ -158,28 +158,15 @@ class Builder extends BaseBuilder
      *
      * @param  mixed $id
      *
-     * @return Collection
+     * @return Cassandra\Rows
      */
     public function deleteRow()
     {
-        return $this->executeCql();
-    }
+        $query = $this->grammar->compileDelete($this);
+        $cql = $this->bindQuery($query);
+        $result = $this->executeCql($cql);
 
-    /**
-     * Execute the CQL query.
-     *
-     * @return Collection
-     */
-    public function executeCql(): Collection
-    {
-        foreach ($this->wheres as &$where) {
-            $where['column'] = explode('.', $where['column'])[1];
-        }
-        unset($where);
-
-        $statement = new Cassandra\SimpleStatement($this->bindQuery($this->toCql()));
-        $future = $this->connection->getCassandraConnection()->executeAsync($statement);
-        return collect($future->get());
+        return $result;
     }
 
     /**
@@ -202,13 +189,19 @@ class Builder extends BaseBuilder
     }
 
     /**
-     * Get the CQL representation of the query.
+     * Execute the CQL query.
      *
-     * @return string
+     * @param  object $cql
+     *
+     * @return Collection
      */
-    public function toCql()
+    public function executeCql($cql)
     {
-        return $this->grammar->compileSelect($this);
+
+        $statement = new Cassandra\SimpleStatement($cql);
+        $future = $this->connection->getCassandraConnection()->executeAsync($statement);
+        $result = $future->get();
+        return collect($result);
     }
 
     /**
@@ -223,7 +216,7 @@ class Builder extends BaseBuilder
         $this->delParams = $columns;
         $query = $this->grammar->compileDelete($this);
         $cql = $this->bindQuery($query);
-        $result = $this->executeCql();
+        $result = $this->executeCql($cql);
 
         return $result;
     }
@@ -254,9 +247,24 @@ class Builder extends BaseBuilder
         if (null === $this->columns) {
             $this->columns = $columns;
         }
+        foreach ($this->wheres as &$where) {
+            $where['column'] = explode('.', $where['column'])[1];
+        }
+        unset($where);
+
         $cql = $this->toCql();
         $cql = $this->bindQuery($cql);
-        return $this->executeCql();
+        return $this->executeCql($cql);
+    }
+
+    /**
+     * Get the CQL representation of the query.
+     *
+     * @return string
+     */
+    public function toCql()
+    {
+        return $this->grammar->compileSelect($this);
     }
 
     /**
@@ -401,7 +409,7 @@ class Builder extends BaseBuilder
     public function index($columns = [])
     {
         $cql = $this->grammar->compileIndex($this, $columns);
-        $result = $this->executeCql();
+        $result = $this->executeCql($cql);
 
         return $result;
     }
