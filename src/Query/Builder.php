@@ -154,63 +154,61 @@ class Builder extends BaseBuilder
     }
 
     /**
-     * Set the table which the query is targeting.
-     *
-     * @param  string $table
-     *
-     * @return $this
-     */
-    public function from($collection)
-    {
-        return parent::from($collection);
-    }
-
-    /**
      * Delete a record from the database.
      *
      * @param  mixed $id
      *
-     * @return Cassandra\Rows
+     * @return Collection
      */
     public function deleteRow()
     {
-        $query = $this->grammar->compileDelete($this);
-        $cql = $this->bindQuery($query);
-        $result = $this->executeCql($cql);
+        return $this->executeCql();
+    }
 
-        return $result;
+    /**
+     * Execute the CQL query.
+     *
+     * @return Collection
+     */
+    public function executeCql(): Collection
+    {
+        foreach ($this->wheres as &$where) {
+            $where['column'] = explode('.', $where['column'])[1];
+        }
+        unset($where);
+
+        $statement = new Cassandra\SimpleStatement($this->bindQuery($this->toCql()));
+        $future = $this->connection->getCassandraConnection()->executeAsync($statement);
+        return collect($future->get());
     }
 
     /**
      * Bind the query with its parameters.
      *
-     * @param  object $cql
+     * @param  string $cql
      *
      * @return $cql
      */
     public function bindQuery($cql)
     {
         foreach ($this->getBindings() as $binding) {
-            $value = "'" . $binding . "'";
-            $cql = preg_replace('/\?/', $value, $cql, 1);
+            if (!is_numeric($binding)) {
+                $binding = "'" . $binding . "'";
+            }
+            $cql = preg_replace('/\?/', $binding, $cql, 1);
         }
 
         return $cql;
     }
 
     /**
-     * Execute the CQL query.
+     * Get the CQL representation of the query.
      *
-     * @param  object $cql
-     *
-     * @return Collection
+     * @return string
      */
-    public function executeCql($cql)
+    public function toCql()
     {
-        $statement = new Cassandra\SimpleStatement($cql);
-        $future = $this->connection->getCassandraConnection()->executeAsync($statement);
-        $result = $future->get();
-        return collect($result);
+        return $this->grammar->compileSelect($this);
     }
 
     /**
@@ -225,7 +223,7 @@ class Builder extends BaseBuilder
         $this->delParams = $columns;
         $query = $this->grammar->compileDelete($this);
         $cql = $this->bindQuery($query);
-        $result = $this->executeCql($cql);
+        $result = $this->executeCql();
 
         return $result;
     }
@@ -249,29 +247,16 @@ class Builder extends BaseBuilder
      *
      * @param  array $columns
      *
-     * @return Cassandra\Rows
+     * @return Collection
      */
-    public function get($columns = ['*'])
+    public function get($columns = ['*']): Collection
     {
-        if (is_null($this->columns)) {
+        if (null === $this->columns) {
             $this->columns = $columns;
         }
-
         $cql = $this->toCql();
         $cql = $this->bindQuery($cql);
-        $result = $this->executeCql($cql);
-
-        return $result;
-    }
-
-    /**
-     * Get the CQL representation of the query.
-     *
-     * @return string
-     */
-    public function toCql()
-    {
-        return $this->grammar->compileSelect($this);
+        return $this->executeCql();
     }
 
     /**
@@ -416,7 +401,7 @@ class Builder extends BaseBuilder
     public function index($columns = [])
     {
         $cql = $this->grammar->compileIndex($this, $columns);
-        $result = $this->executeCql($cql);
+        $result = $this->executeCql();
 
         return $result;
     }
