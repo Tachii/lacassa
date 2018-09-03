@@ -3,6 +3,8 @@
 namespace Cubettech\Lacassa\Eloquent;
 
 use Carbon\Carbon;
+use Cassandra\Time;
+use Cassandra\Timeuuid;
 use DateTime;
 use Illuminate\Database\Eloquent\Model as BaseModel;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -35,6 +37,25 @@ abstract class Model extends BaseModel
     protected $parentRelation;
 
     /**
+     * Create the model in the database.
+     *
+     * @param  array $attributes
+     * @param  array $options
+     *
+     * @return Model
+     */
+    public static function create(array $attributes = [])
+    {
+        $model = new static($attributes);
+        if ($model->getKeyType() === 'timeuuid') {
+            $timeuuid = new Timeuuid(\time());
+            $model->{$model->getKeyName()} = $timeuuid;
+        }
+        $model->setIncrementing(false)->save();
+        return $model;
+    }
+
+    /**
      * Custom accessor for the model's id.
      *
      * @param  mixed $value
@@ -63,50 +84,11 @@ abstract class Model extends BaseModel
     }
 
     /**
-     * Convert a DateTime to a storable UTCDateTime object.
-     *
-     * @param  DateTime|int $value
-     *
-     * @return UTCDateTime
-     */
-    public function fromDateTime($value)
-    {
-        // If the value is already a UTCDateTime instance, we don't need to parse it.
-        if ($value instanceof Timestamp) {
-            return $value;
-        }
-
-        // Let Eloquent convert the value to a DateTime instance.
-        if (!$value instanceof DateTime) {
-            $value = parent::asDateTime($value);
-        }
-
-        return new Timestamp($value->timestamp);
-    }
-
-    /**
-     * Return a timestamp as DateTime object.
-     *
-     * @param  mixed $value
-     *
-     * @return DateTime
-     */
-    protected function asDateTime($value)
-    {
-        // Convert UTCDateTime instances.
-        if ($value instanceof Timestamp) {
-            return Carbon::createFromTimestamp($value->time());
-        }
-
-        return parent::asDateTime($value);
-    }
-
-    /**
      * Get the format for database stored dates.
      *
      * @return string
      */
-    protected function getDateFormat()
+    public function getDateFormat()
     {
         return $this->dateFormat ?: 'Y-m-d H:i:s';
     }
@@ -158,31 +140,10 @@ abstract class Model extends BaseModel
     }
 
     /**
-     * Get an attribute from the $attributes array.
-     *
-     * @param  string $key
-     *
-     * @return mixed
-     */
-    protected function getAttributeFromArray($key)
-    {
-        // Support keys in dot notation.
-        if (str_contains($key, '.')) {
-            $attributes = array_dot($this->attributes);
-
-            if (array_key_exists($key, $attributes)) {
-                return $attributes[$key];
-            }
-        }
-
-        return parent::getAttributeFromArray($key);
-    }
-
-    /**
      * Set a given attribute on the model.
      *
      * @param  string $key
-     * @param  mixed  $value
+     * @param  mixed $value
      */
     public function setAttribute($key, $value)
     {
@@ -205,6 +166,40 @@ abstract class Model extends BaseModel
     }
 
     /**
+     * Get a new query builder instance for the connection.
+     *
+     * @return Builder
+     */
+    protected function newBaseQueryBuilder()
+    {
+        $connection = $this->getConnection();
+
+        return new QueryBuilder($connection, $connection->getPostProcessor());
+    }
+
+    /**
+     * Convert a DateTime to a storable UTCDateTime object.
+     *
+     * @param  DateTime|int $value
+     *
+     * @return UTCDateTime
+     */
+    public function fromDateTime($value)
+    {
+        // If the value is already a UTCDateTime instance, we don't need to parse it.
+        if ($value instanceof Timestamp) {
+            return $value;
+        }
+
+        // Let Eloquent convert the value to a DateTime instance.
+        if (!$value instanceof DateTime) {
+            $value = parent::asDateTime($value);
+        }
+
+        return new Timestamp($value->timestamp);
+    }
+
+    /**
      * Convert the model's attributes to an array.
      *
      * @return array
@@ -224,6 +219,23 @@ abstract class Model extends BaseModel
     }
 
     /**
+     * Return a timestamp as DateTime object.
+     *
+     * @param  mixed $value
+     *
+     * @return DateTime
+     */
+    protected function asDateTime($value)
+    {
+        // Convert UTCDateTime instances.
+        if ($value instanceof Timestamp) {
+            return Carbon::createFromTimestamp($value->time());
+        }
+
+        return parent::asDateTime($value);
+    }
+
+    /**
      * Get the casts array.
      *
      * @return array
@@ -231,29 +243,6 @@ abstract class Model extends BaseModel
     public function getCasts()
     {
         return $this->casts;
-    }
-
-    /**
-     * Determine if the new and old values for a given key are numerically equivalent.
-     *
-     * @param  string $key
-     *
-     * @return bool
-     */
-    protected function originalIsNumericallyEquivalent($key)
-    {
-        $current = $this->attributes[$key];
-        $original = $this->original[$key];
-
-        // Date comparison.
-        if (in_array($key, $this->getDates())) {
-            $current = $current instanceof Timestamp ? $this->asDateTime($current) : $current;
-            $original = $original instanceof Timestamp ? $this->asDateTime($original) : $original;
-
-            return $current == $original;
-        }
-
-        return parent::originalIsNumericallyEquivalent($key);
     }
 
     /**
@@ -310,33 +299,11 @@ abstract class Model extends BaseModel
     }
 
     /**
-     * Remove one or more values from an array.
-     *
-     * @param  string $column
-     * @param  mixed  $values
-     *
-     * @return mixed
-     */
-    public function pull($column, $values)
-    {
-        // Do batch pull by default.
-        if (!is_array($values)) {
-            $values = [$values];
-        }
-
-        $query = $this->setKeysForSaveQuery($this->newQuery());
-
-        $this->pullAttributeValues($column, $values);
-
-        return $query->pull($column, $values);
-    }
-
-    /**
      * Append one or more values to the underlying attribute value and sync with original.
      *
      * @param  string $column
-     * @param  array  $values
-     * @param  bool   $unique
+     * @param  array $values
+     * @param  bool $unique
      */
     protected function pushAttributeValues($column, array $values, $unique = false)
     {
@@ -357,10 +324,53 @@ abstract class Model extends BaseModel
     }
 
     /**
+     * Get an attribute from the $attributes array.
+     *
+     * @param  string $key
+     *
+     * @return mixed
+     */
+    protected function getAttributeFromArray($key)
+    {
+        // Support keys in dot notation.
+        if (str_contains($key, '.')) {
+            $attributes = array_dot($this->attributes);
+
+            if (array_key_exists($key, $attributes)) {
+                return $attributes[$key];
+            }
+        }
+
+        return parent::getAttributeFromArray($key);
+    }
+
+    /**
+     * Remove one or more values from an array.
+     *
+     * @param  string $column
+     * @param  mixed $values
+     *
+     * @return mixed
+     */
+    public function pull($column, $values)
+    {
+        // Do batch pull by default.
+        if (!is_array($values)) {
+            $values = [$values];
+        }
+
+        $query = $this->setKeysForSaveQuery($this->newQuery());
+
+        $this->pullAttributeValues($column, $values);
+
+        return $query->pull($column, $values);
+    }
+
+    /**
      * Remove one or more values to the underlying attribute value and sync with original.
      *
      * @param  string $column
-     * @param  array  $values
+     * @param  array $values
      */
     protected function pullAttributeValues($column, array $values)
     {
@@ -392,22 +402,10 @@ abstract class Model extends BaseModel
     }
 
     /**
-     * Get a new query builder instance for the connection.
-     *
-     * @return Builder
-     */
-    protected function newBaseQueryBuilder()
-    {
-        $connection = $this->getConnection();
-
-        return new QueryBuilder($connection, $connection->getPostProcessor());
-    }
-
-    /**
      * Handle dynamic method calls into the method.
      *
      * @param  string $method
-     * @param  array  $parameters
+     * @param  array $parameters
      *
      * @return mixed
      */
@@ -419,22 +417,6 @@ abstract class Model extends BaseModel
         }
 
         return parent::__call($method, $parameters);
-    }
-
-    /**
-     * Create the model in the database.
-     *
-     * @param  array $attributes
-     * @param  array $options
-     *
-     * @return Model
-     */
-    public static function create(array $attributes = [])
-    {
-        $model = new static($attributes);
-        $model->setIncrementing(false)->save();
-
-        return $model;
     }
 
     /**
@@ -461,5 +443,28 @@ abstract class Model extends BaseModel
     public function getParentRelation()
     {
         return $this->parentRelation;
+    }
+
+    /**
+     * Determine if the new and old values for a given key are numerically equivalent.
+     *
+     * @param  string $key
+     *
+     * @return bool
+     */
+    protected function originalIsNumericallyEquivalent($key)
+    {
+        $current = $this->attributes[$key];
+        $original = $this->original[$key];
+
+        // Date comparison.
+        if (in_array($key, $this->getDates())) {
+            $current = $current instanceof Timestamp ? $this->asDateTime($current) : $current;
+            $original = $original instanceof Timestamp ? $this->asDateTime($original) : $original;
+
+            return $current == $original;
+        }
+
+        return parent::originalIsNumericallyEquivalent($key);
     }
 }
