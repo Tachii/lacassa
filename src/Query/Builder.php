@@ -345,7 +345,6 @@ class Builder extends BaseBuilder
      */
     public function insert(array $values = [])
     {
-        $insertCollectionArray = [];
         // Since every insert gets treated like a batch insert, we will make sure the
         // bindings are structured in a way that is convenient when building these
         // inserts statements by verifying these elements are actually an array.
@@ -353,12 +352,15 @@ class Builder extends BaseBuilder
             return true;
         }
 
-        if (!is_array(reset($values))) {
+        if (!\is_array(reset($values))) {
             $values = [$values];
         }
 
-        if (!is_array(reset($values))) {
-            $values = [$values];
+        if (\is_array(reset($values))) {
+            foreach ($values as $key => $value) {
+                ksort($value);
+                $values[$key] = $value;
+            }
         }
 
 
@@ -366,10 +368,7 @@ class Builder extends BaseBuilder
         // in the same order for the record. We need to make sure this is the case
         // so there are not any errors or problems when inserting these records.
         else {
-            foreach ($values as $key => $value) {
-                ksort($value);
-                $values[$key] = $value;
-            }
+            $values = [$values];
         }
 
         // Finally, we will run this query against the database connection and return

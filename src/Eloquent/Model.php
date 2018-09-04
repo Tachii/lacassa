@@ -3,15 +3,18 @@
 namespace Cubettech\Lacassa\Eloquent;
 
 use Carbon\Carbon;
-use Cassandra\Time;
+use Cassandra\Timestamp;
 use Cassandra\Timeuuid;
+use Cubettech\Lacassa\Query\Builder as QueryBuilder;
 use DateTime;
 use Illuminate\Database\Eloquent\Model as BaseModel;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Cubettech\Lacassa\Query\Builder as QueryBuilder;
-use Cassandra\Timestamp;
 use ReflectionMethod;
 
+/**
+ * Class Model
+ * @package Cubettech\Lacassa\Eloquent
+ */
 abstract class Model extends BaseModel
 {
 
@@ -40,19 +43,24 @@ abstract class Model extends BaseModel
      * Create the model in the database.
      *
      * @param  array $attributes
-     * @param  array $options
-     *
      * @return Model
      */
     public static function create(array $attributes = [])
     {
         $model = new static($attributes);
-        if ($model->getKeyType() === 'timeuuid') {
-            $timeuuid = new Timeuuid(\time());
-            $model->{$model->getKeyName()} = $timeuuid;
-        }
         $model->setIncrementing(false)->save();
         return $model;
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            if ($model->getKeyType() === 'timeuuid') {
+                $model->{$model->getKeyName()} = new Timeuuid(\time());
+            }
+            return true;
+        });
     }
 
     /**
