@@ -248,7 +248,7 @@ class Builder extends BaseBuilder
             $this->columns = $columns;
         }
         foreach ($this->wheres as &$where) {
-            $where['column'] = explode('.', $where['column'])[1];
+            $where['column'] = explode('.', $where['column'])[1] ?? explode('.', $where['column'])[0];
         }
         unset($where);
 
